@@ -1,0 +1,64 @@
+<app-navbar></app-navbar>
+<br><br><br><br><br><br><br>
+
+
+<table class="table-info" border="1" width="100%" summary="">
+  <tr>
+    <th>
+      id
+    </th>
+    <th>
+      nom
+    </th>
+    <th>
+      discription
+    </th>
+    <th>
+      prix
+    </th>
+    <th>
+      images
+    </th>
+    <pre>   </pre>
+    <th>
+      supprimer
+    </th>
+    <th>
+      modifier
+    </th>
+  </tr>
+  <tr *ngFor="let rep1 of produit">
+    <td>
+      <input type="text" id="{{rep1.id}}" value="{{rep1.id}}">
+
+    </td>
+    <td>
+      <input type="text" id="{{rep1.nom}}" value="{{rep1.nom}}">
+
+     </td>
+     <td>
+      <input type="text" id="{{rep1.discription}}" value="{{rep1.discription}}">
+
+
+     </td>
+     <td>
+      <input type="text" id="{{rep1.prix}}" value="{{rep1.prix}}">
+
+
+     </td>
+    <td width="10">
+      <input type="hidden" id="{{rep1.image}}" value="{{rep1.image}}">
+      <img src="{{rep1.image}}" width="120%">
+    </td>
+    <pre>   </pre>
+    <td>
+        <a class="btn btn-danger" (click)="supp(rep1)">supprimer</a>
+     </td>
+     <td>
+
+      <a class="btn btn-danger"  click="modif(rep3)">modifier</a>
+   </td>
+  </tr>
+
+
+</table>

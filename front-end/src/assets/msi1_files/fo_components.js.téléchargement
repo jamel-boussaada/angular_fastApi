@@ -1,0 +1,1005 @@
+/**
+ * DISCLAIMER
+ *
+ * Do not edit or add to this file.
+ * You are not authorized to modify, copy or redistribute this file.
+ * Permissions are reserved by FME Modules.
+ *
+ *  @author    FME Modules
+ *  @copyright 2019 FME Modules
+ *  @license   Comerical Licence
+ *  @package   compositeproductbuilder
+ */
+
+Vue.use(VueNumberInput);
+if (typeof layout !== 'undefined' && layout == 'steps') {
+    Vue.use(VueGoodWizard);
+}
+Vue.config.productionTip = false;
+
+$(window).load(function() {
+    restoreRadioBtn();
+});
+
+
+$(document).ready(function() {
+
+    restoreRadioBtn();
+    var basePrice = (typeof baseProduct !== 'undefined') ? baseProduct.price : 0;
+    if (!psNew && typeof priceWithDiscountsDisplay !== 'undefined') {
+        basePrice = priceWithDiscountsDisplay;
+    }
+
+    initVue(basePrice);
+    if (psNew) {
+        if (typeof baseProduct !== 'undefined') {
+            prestashop.on('updatedProduct', function(event) {
+                basePrice = (baseProduct.hasAttributes) ? baseProduct.attributes[event.id_product_attribute].price : baseProduct.price;
+                initVue(basePrice);
+            });
+            prestashop.on('clickQuickView', function(event) {
+                setTimeout(function() {
+                    basePrice = (baseProduct.hasAttributes) ? baseProduct.attributes[event.dataset.idProductAttribute].price : baseProduct.price;
+                    initVue(basePrice);
+                }, 800);
+            });
+        }
+    } else {
+        jQuery('ul#color_to_pick_list li a').click(function() {
+            setTimeout("jQuery('#idCombination').trigger('change');", 600);
+        });
+
+        jQuery('.attribute_list select').change(function() {
+            setTimeout("jQuery('#idCombination').trigger('change');", 600);
+        });
+
+        //check if anything changed on hidden combination id
+        jQuery('#idCombination').on('change', function() {
+            var changeEvent = new Event('change');
+            var componentCombination = document.getElementById('componentCombination');
+            componentCombination.value = $(this).val();
+            componentCombination.dispatchEvent(changeEvent);
+        });
+    }
+});
+
+
+/**
+ * javascript inArray
+ * @return bool
+ */
+function inArray(needle, haystack) {
+    var length = haystack.length;
+    for (var i = 0; i < length; i++) {
+        if (haystack[i] == needle) return true;
+    }
+    return false;
+}
+
+/**
+ * exclude radio buttons from uniform classes
+ * @return void
+ */
+function restoreRadioBtn() {
+    if (!psNew && typeof $.uniform !== 'undefined') {
+        $.uniform.restore(".type_radio");
+    }
+}
+
+/**
+ * run vue app
+ * @return vue object
+ */
+function initVue(basePrice) {
+    if (document.getElementById('component-container')) {
+        // child components
+        Vue.component('vue-number-input', VueNumberInput);
+        // componented selected
+        Vue.component('component-selected', {
+            props: ['componentItem'],
+            data: function() {
+                return {
+                    size: '',
+                    qty: {},
+                    price: {},
+                    max_qty: {},
+                    subtotal: {},
+                    thumbnail: {},
+                    selectedVariant: {},
+                    none_label: none_label,
+                    subtotal_label: subtotal_label
+                }
+            },
+            mounted: function() {
+                var qty = this.componentItem.max,
+                    image = this.componentItem.product.cover;
+                if (this.componentItem.max <= 0) {
+                    if (this.componentItem.product.hasAttributes) {
+                        qty = this.componentItem.product.attributes[this.componentItem.product.default].stock;
+                    } else {
+                        qty = this.componentItem.product.stock;
+                    }
+                }
+
+                if (this.componentItem.product.hasAttributes) {
+                    image = this.componentItem.product.attributes[this.componentItem.product.default].image;
+                }
+
+                this.$set(this.max_qty, this.componentItem.id_selected_product, qty);
+                this.$set(this.thumbnail, this.componentItem.id_selected_product, image);
+                this.$set(this.selectedVariant, this.componentItem.id_selected_product, this.componentItem.product.default);
+                this.$set(this.price, this.componentItem.id_component, this.componentItem.product.formattedPrice);
+                this.$set(this.qty, this.componentItem.id_component, this.componentItem.min);
+                var price = (parseInt(this.qty[this.componentItem.id_component]) * parseFloat(this.componentItem.product.price));
+                this.$set(this.subtotal, this.componentItem.id_component, price);
+
+                if (psNew) {
+                    this.size = 'small';
+                }
+            },
+            computed: {
+                subTotalPrice: function() {
+                    var parent = (inArray(layout, ['steps', 'accordion'])) ? this.$parent.$parent.$parent : this.$parent.$parent;
+                    return parent.getFormattedPrice(parseFloat(this.subtotal[this.componentItem.id_component]));
+                }
+            },
+            methods: {
+                updateVariant: function(event) {
+                    const item = event.target;
+                    var id = item.closest('.item-variants').dataset.id
+                    idComponent = item.closest('.item-variants').dataset.component;
+                    if (item.options.selectedIndex > -1) {
+                        this.$set(this.thumbnail, id, item.options[item.options.selectedIndex].dataset.image);
+                        this.$set(this.price, idComponent, item.options[item.options.selectedIndex].dataset.formattedprice);
+                        this.$set(this.subtotal, idComponent, (parseInt(this.qty[idComponent]) * parseFloat(item.options[item.options.selectedIndex].dataset.price)));
+
+                        if (this.componentItem.max <= 0) {
+                            this.$set(this.max_qty, id, parseInt(item.options[item.options.selectedIndex].dataset.stock));
+                        }
+
+                        var itemData = {
+                            'ipa': this.selectedVariant[id],
+                            'id_component': idComponent,
+                            'qty': this.qty[idComponent],
+                            'price': this.subtotal[idComponent],
+                        };
+                    var parent = (inArray(layout, ['steps', 'accordion'])) ? this.$parent.$parent.$parent : this.$parent.$parent;
+                        parent.updateSelection(itemData);
+                    }
+                },
+                deSelect: function(event) {
+                    var parent = (inArray(layout, ['steps', 'accordion'])) ? this.$parent.$parent.$parent : this.$parent.$parent;
+                    parent.clearSelection(event);
+                },
+                getQty: function(event) {
+                    var price = (parseInt(this.qty[this.componentItem.id_component]) * parseFloat(this.componentItem.product.price));
+                    this.$set(this.subtotal, this.componentItem.id_component, price);
+                    var itemData = {
+                        'ipa': this.selectedVariant[this.componentItem.id_selected_product],
+                        'id_component': this.componentItem.id_component,
+                        'qty': this.qty[this.componentItem.id_component],
+                        'price': this.subtotal[this.componentItem.id_component],
+                    };
+                    var parent = (inArray(layout, ['steps', 'accordion'])) ? this.$parent.$parent.$parent : this.$parent.$parent;
+                    parent.updateSelection(itemData);
+                }
+            },
+            template: `
+            <div class="component-selected-item clearfix">
+                <div class="selected-item">
+                    <div class="item-name">
+                        <a target="_blank" class="item-link" :href="componentItem.product.link">{{ componentItem.product.name }}</a>
+                    </div>
+                    <a href="javascript:void(0);"
+                    class="selected-cross"
+                    :data-id="componentItem.id_component" @click="deSelect">x</a>
+                </div>
+                <div v-if="!componentItem.product.hasAttributes" class="item-simple item-variants clearfix"
+                    :data-id="componentItem.product.id"
+                    :data-ipa="0"
+                    :data-price="componentItem.product.price">
+                    <div class="item-image">
+                        <img class="imgm img-thumbnail" :src="componentItem.product.image" :alt="componentItem.product.name">
+                    </div>
+                    <div class="item-info">
+                        <div class="item-price">{{ componentItem.product.formattedPrice }}</div>
+                        <div class="item-qty">
+                            <number-input v-model="qty[componentItem.id_component]" :min="componentItem.min" :max="max_qty[componentItem.id_selected_product]" :size="size" inline controls @change="getQty"></number-input>
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="item-variants clearfix" :data-id="componentItem.id_selected_product" :data-component="componentItem.id_component">
+                    <div class="item-image">
+                    <img class="imgm img-thumbnail" :alt="componentItem.product.name" :src="(componentItem.id_selected_product in thumbnail) ? thumbnail[componentItem.id_selected_product] : componentItem.product.cover">
+                    </div>
+                    <div class="item-info">
+                        <div class="item-variant">
+                            <select class="variant-selection"
+                            @change="updateVariant($event)"
+                            v-model="selectedVariant[componentItem.id_selected_product]">
+                                <option v-for="item in componentItem.product.attributes"
+                                :value="item.id_product_attribute"
+                                :data-id="item.id"
+                                :data-price="item.price"
+                                :data-formattedprice="item.formattedPrice"
+                                :data-image="item.image"
+                                :data-stock="item.stock">
+                                {{ item.attribute }}
+                                </option>
+                            </select>
+                        </div>
+                        <div v-if="(componentItem.id_component in price)" class="item-price">{{ price[componentItem.id_component] }}</div>
+                        <div v-else class="item-price">{{ componentItem.product.formattedPrice }}</div>
+                        <div class="item-qty">
+                            <number-input v-model="qty[componentItem.id_component]" :min="componentItem.min" :max="max_qty[componentItem.id_selected_product]" :size="size" inline controls @change="getQty"></number-input>
+                        </div>
+                    </div>
+                </div>
+                <!--<div class="item-subtotal clearfix"><p class="align-right">{{ subtotal_label }}: {{ subTotalPrice }}</p></div>-->
+            </div>
+            `,
+        });
+        // component accordion
+        Vue.component('component-accordion', {
+            template: `
+            <div class="Expander">
+                <div class="Expander__trigger"
+                @click="open=!open"
+                :class="open?'active':'beforeBorder'">
+                    <svg class="Expander__trigger-Icon"
+                    :class="{open:open}"
+                    width="40"
+                    height="12"
+                    stroke="cornflowerblue">
+                        <polyline points="12,2 20,10 28,2" stroke-width="3" fill="none"></polyline>
+                    </svg>
+                    {{ title }}
+                    <slot name="required"></slot>
+                </div>
+                <transition :name="animation">
+                    <div class="Expander__body" v-show="open">
+                        <slot></slot>
+                    </div>
+                </transition>
+            </div>
+          `,
+            props: {
+                title: {
+                    type: String,
+                    default: 'title'
+                },
+                animation: {
+                    type: String,
+                    default: '', //'rightToLeft'
+                }
+            },
+            data() {
+                return {
+                    open: false
+                }
+            }
+        });
+
+        // component options
+        Vue.component('component-options', {
+            //props: { dataOptions: String, dataStyle: String, dataComponent: String, dataCallback: Function },
+            props: ['dataOptions', 'dataStyle', 'dataComponent', 'dataCallback'],
+            data: function() {
+                var parent = (inArray(layout, ['steps', 'accordion'])) ? this.$parent.$parent.$parent : this.$parent.$parent;
+               return {
+                    none_label: none_label,
+                    items: this.dataOptions
+                }
+            },
+            methods: {
+                getItem: function(event) {
+                    // calling/bubbling parent function from child
+                    var parent = (inArray(layout, ['steps', 'accordion'])) ? this.$parent.$parent.$parent : this.$parent.$parent;
+                    parent.selectItem(event);
+                },
+                limitStr: function(string, limit) {
+                  let str = string;
+                  if (typeof str === 'string' && str.length > limit) {
+                    str = str.slice(0, limit) + '...';
+                  }
+                  return str;
+                }
+            },
+            template: `
+            <div>
+                <select v-if="dataStyle == 'dropdown'" class="selection_dropdown" @change="getItem($event)">
+                    <option :value="0"
+                    :data-component="dataComponent">{{ none_label }}</option>
+
+                    <option v-for="item in items" class="item-component"
+                    :value="item.id"
+                    :data-id="item.id"
+                    :data-out_of_stock="item.outOfStock"
+                    :data-price="item.price"
+                    :data-stock="item.stock"   
+                    :data-formattedPrice="item.formattedPrice"
+                    :data-description="item.description"
+                    :data-component="dataComponent">{{ item.name }}</option>
+                </select>
+
+                <div v-else-if="dataStyle == 'thumbnail'">
+                    <div v-for="item in items"
+                    :class="{ 'not-allowed' : item.outOfStock != 1 && item.stock == 0}"
+                    class="item-component type_thumbnail divTable pointer"
+                    :data-id="item.id"
+                    :data-stock="item.stock"
+                    :data-out_of_stock="item.outOfStock"
+                    :data-component="dataComponent"
+                    :data-description="item.description"
+                    @click="getItem($event)">
+                        <div class="divTableRow">
+
+                            <div class="divTableCell" style="width: 150px;">
+                            <div class="item-image divTableRow">
+                                <img class="imgm img-thumbnail" :src="item.image" :alt="item.name" style="margin-bottom: 0px;">
+                                <span style="font-weight: 500;
+                                color: #ffffff;
+                                background-color: #0099cc;
+                                padding: 4px 7px 4px 7px;
+                                border-radius: 6px;
+                                font-size: 10pt;">{{ item.formattedPrice }}</span>
+                            </div>
+                            </div>
+                            <div class="divTableCell">
+                                    <a target="_blank" style="color: #2fb5d2;" class="item-link">{{ item.name }}</a>
+                                    <span v-if="(item.stock == 0)&&(item.outOfStock == 1)" class="badge badge-pill badge-warning">Pré-commander</span>
+                                    <span v-if="(item.stock == 0)&&(item.outOfStock != 1)" class="badge badge-pill badge-danger">En rupture de stock</span><br/>
+                                    <span style="font-size:10pt">{{ limitStr(item.description,350) }}</span> <br/>
+                                    <a @click.stop class="item-link item-details" :href="item.link" target="_blank">+ de détails</a>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <p v-else-if="dataStyle == 'radio'" v-for="item in items" class="radio-item"> 
+                    <label class="radio_selection radio-inline control-label" :for="item.id">
+                        <input type="radio"
+                        :id="item.id"
+                        class="item-component type_radio not_uniform"
+                        :value="item.id"
+                        :data-id="item.id"
+                        :data-out_of_stock="item.out_of_stock"
+                        :data-stock="item.stock"
+                        :data-component="dataComponent"
+                        :data-description="item.description"
+                        data-no-uniform="true"
+                        @click="getItem($event)">
+                        <div class="item-info type_radio">
+                            <span class="item-name">{{ item.name }}</span> - <span class="item-price">{{ item.formattedPrice }}</span>
+                        </div>
+                    </label>
+                </p>
+            </div>
+            `,
+        });
+
+
+  // component modal
+        Vue.component('component-modal',{
+        data:function(){
+            var parent = inArray(layout, ['steps', 'accordion']) ? this.$parent.$parent : this.$parent;
+            return {style : parent.modalCurrentStyle,
+                    componentId : parent.modalCurrentComponentId,
+                    selectedItem : parent.selectedItem,
+                    name: parent.modalCurrentComponent.component_name
+                    };
+        },
+        computed:{
+            items: function() {
+            var parent = inArray(layout, ['steps', 'accordion']) ? this.$parent.$parent : this.$parent;
+                return parent.modalCurrentOptions;
+            },
+            isSelected: function() {
+            var parent = inArray(layout, ['steps', 'accordion']) ? this.$parent.$parent : this.$parent;
+                return parent.isSelected;
+            }
+        },
+        methods: {
+            close: function(){
+                this.$emit('close');
+            }
+        },
+        mounted: function(){
+            var self=this;
+        },
+        template:`
+        <div class="c-products__row">
+        <div class="modal fade in modal-active" id="myModal" role="dialog" >
+            <div class="modal-mask" @click="close"></div>
+            <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <button type="button" @click="close" class="close"><span >&times;</span></button>
+                            <h4 class="modal-title">
+                                {{name}}
+                            </h4>
+                        </div>
+                        <div class="modal-body" style="margin-bottom: 0;">
+                            <div class="component-item-thumbs">
+                                <transition name="selected" mode="out-in">
+                                    <div v-if="(componentId in isSelected)" class="coponent-selection">
+                                        <!-- child component -->
+                                        <component-selected :component-item="selectedItem[componentId]"></component-selected>
+                                    </div>
+                                </transition>
+                                <div v-if="!(componentId in isSelected)" class="component_products">
+                                    <!-- child component -->
+                                    <component-options :data-options="items" :data-style="style" :data-component="componentId">
+                                    </component-options>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-default" @click="close">Close</button>
+                        </div>
+                </div>
+            </div>
+            </div>
+        </div>`
+    });
+
+        /*******************************/
+        /*        Main App            */
+        /*****************************/
+        const app = new Vue({
+            created: function() {
+                this.initOptions();
+            },
+            el: '#component-container',
+            delimiters: ['%%', '%%'],
+            data: {
+                loading: {},
+                itemPrice: 0,
+                isSelected: {},
+                selectedItem: {},
+                globalLoader: false,
+                basePrice: basePrice,
+                totalPrice: basePrice,
+                selectedComponents: {},
+                errorLabel: error_label,
+                required: requiredComponents,
+                steps: componentSteps,
+                componentCombination: 0,
+                components:[],
+                options: options,
+                optionsMap: optionsMap,
+                availableOptions: {},
+                selected: {},
+                userSelections: {},
+                isModalVisible: false,
+                negation: negation,
+
+                modalCurrentComponentId: false,
+                modalCurrentComponent: {},
+                modalCurrentOptions: [],
+                modalCurrentStyle: "",
+            },
+            mounted: function() {
+                // checking required components
+                if (Object.keys(this.required).length) {
+                    this.overrideAddToCartBtn(true);
+                };
+            },
+            watch: {
+                selectedComponents: function(selectedComponents) {
+                  console.log(">>selectedComponents:watch:");
+                  this.calculatePrice();
+                    if (Object.keys(this.required).length) {
+                        if (Object.keys(selectedComponents).length) {
+                            this.switchAddToCartBtn(false);
+                            for (var component in this.required) {
+                                if (!(component in selectedComponents)) {
+                                    this.switchAddToCartBtn(true);
+                                    break;
+                                }
+                            }
+                        } else {
+                            this.switchAddToCartBtn(true);
+                        }
+                    } else if (Object.keys(selectedComponents).length) {
+                        if (document.querySelector('[data-button-action="component-add-to-cart"]') == null) {
+                            this.overrideAddToCartBtn(false);
+                        } else {
+                            this.switchAddToCartBtn(false);
+                        }
+                    } else {
+                        this.switchAddToCartBtn(false, true)
+                    }
+                    this.updataModalData(this.modalCurrentComponentId);
+                },
+                modalCurrentComponentId: function(modalCurrentComponentId){
+                    console.log(">>modalCurrentComponentId:watch: "+modalCurrentComponentId );
+                    this.updataModalData(modalCurrentComponentId);
+                }
+            },
+            methods: {
+                updataModalData: function(component){
+                    console.log(">>updataModalData:");
+                    this.modalCurrentComponent=this.components.find(x => x.id_component ==  component);
+                    this.updateOptions();
+                    this.modalCurrentOptions=this.availableOptions.components[component];
+                    this.modalCurrentStyle=this.modalCurrentComponent.selection_style;
+                    console.log("updataModalData:<<");
+                },
+                showModal:function(component) {
+                    console.log(">>showModal: "+component);
+                    this.modalCurrentComponentId=component;
+                    this.isModalVisible = true;
+                },
+                closeModal:function() {
+                    console.log(">>closeModal:");
+                    this.isModalVisible = false;
+                },
+                checkUserSelections:function(){
+                  console.log(">>checkUserSelections:");
+                  var self = this;
+                  for (var key in self.userSelections) {
+                    if(!self.availableOptions.components[key]) {
+                      delete self.userSelections[key];
+                      delete self.selected[key];
+                      console.log(key+ " cleaned");
+                    }
+                  }
+                  console.log(JSON.stringify(self.userSelections));
+                },
+                updateOptions:function(){
+                  console.log(">>updateOptions:");
+                  var self=this;
+                  var result = true;
+                  var availableOptions = self.options.filter(function(option) {
+                    result = true;
+                    option.keys.forEach(function(component) {
+                        result=result 
+                        && (self.selected[component]?(option.components.find(x => x.id_component == component).options.some( x => x['id'] === self.selected[component] )):true);
+
+                    });
+                    console.log(result?option.id+" enabled":option.id+" disabled");
+                    return (result);
+                  }
+                  );
+                  console.log(">>self.userSelections:");
+                  console.log(self.userSelections);
+                  self.getAvailableOption(availableOptions);
+                },
+                selectOptions:function(componentId,productId) {
+                  console.log(">>selectOptions: "+componentId);
+                  var self=this;
+                  self.selected[componentId]=productId;
+                  self.userSelections[componentId]=self.selected[componentId];
+                  self.updateOptions();
+                },
+                getComponents: function(options) {
+                    console.log(">>getComponents:");
+                    var self = this;
+                    self.components=[];
+                    options.forEach(function(option) {
+                        self.components=self.components.concat(option.components);
+                    });
+                    self.components = Array.from(new Set(self.components.map(JSON.stringify))).map(JSON.parse);
+                },
+                getAvailableOption: function(options) {
+                    var self = this;
+                    console.log(">>getAvailableOption:");
+                    var _availableOptions={};
+
+                    if(self.negation){
+                         options.forEach(function(option) {
+                                option.keys.forEach(function(component) {
+                                    if (!_availableOptions[component]) {
+                                        _availableOptions[component] = []
+                                    }
+                                    option.components.forEach(function(c) {
+                                        if (c.id_component === component) {
+                                            _availableOptions[component] = _availableOptions[component].concat(c.options);
+                                        }
+                                    });
+
+                                    _availableOptions[component] = Array.from(new Set(_availableOptions[component].map(JSON.stringify))).map(JSON.parse);
+                                });
+                            });
+
+                            var active_rules=[];                               
+                            for (var key in self.userSelections) { 
+                                var opt = self.optionsMap.filter(x => x.id_product == self.userSelections[key])
+                                active_rules=active_rules.concat(opt);
+                            }
+                            console.log(">>active_rules:");
+                            console.log(JSON.stringify(active_rules));
+
+
+                            var full_rules=[];
+                            active_rules.forEach(function(rule){
+                                var opt = self.optionsMap.filter(x => x.id_option == rule.id_option)
+                                full_rules=full_rules.concat(opt)
+                            });
+                            console.log(">>full_rules:");
+                            console.log(JSON.stringify(full_rules));
+
+                            for (var key in _availableOptions) {
+                                _availableOptions[key]=_availableOptions[key].filter(x =>
+                                //x.stock > 0 &&
+                                full_rules.filter(y => y.id_product==x.id).length==0);
+                            } 
+
+                     } else{
+                        options.forEach(function(option) {
+                            option.keys.forEach(function(component) {
+                                if (!_availableOptions[component]) {
+                                    _availableOptions[component] = []
+                                }
+                                option.components.forEach(function(c) {
+                                    if (c.id_component === component) {
+                                        _availableOptions[component] = _availableOptions[component].concat(c.options);
+                                    }
+                                });
+
+                                _availableOptions[component] = Array.from(new Set(_availableOptions[component].map(JSON.stringify))).map(JSON.parse);
+
+                            });
+                        });
+                    }
+                    self.availableOptions.components = _availableOptions;
+                    console.log("getAvailableOption:<<");
+                },
+                initOptions: function() {
+                    var self = this;
+                    console.log(">>initOptions:");
+                    self.getAvailableOption(self.options);
+                    self.getComponents(self.options);
+                },
+                updateComponents: function(event) {
+                    if (typeof priceWithDiscountsDisplay !== 'undefined') {
+                        this.basePrice = priceWithDiscountsDisplay;
+                    }
+                    this.calculatePrice();
+                },
+                /*    Step Functions Start    */
+                nextClicked: function(currentPage) {
+                    return true; //return false if you want to prevent moving to next page
+                },
+                backClicked: function(currentPage) {
+                    return true; //return false if you want to prevent moving to previous page
+                },
+                /*    Step Functions End    */
+                selectItem: function(event) {
+                    vm = this;
+                    var item = event.target;
+                    var id = event.target.dataset.id;
+                    var stock = event.target.dataset.stock;
+                    var out_of_stock = event.target.dataset.out_of_stock;
+                    var idComponent = event.target.dataset.component;
+  
+                    if (item.localName === 'select') {
+                        if (item.options.selectedIndex > -1) {
+                            id = item.options[item.options.selectedIndex].dataset.id;
+                            stock = item.options[item.options.selectedIndex].dataset.stock;
+                            out_of_stock = item.options[item.options.selectedIndex].dataset.out_of_stock;
+                            idComponent = item.options[item.options.selectedIndex].dataset.component;
+                        }
+                    }
+                    if (typeof id === 'undefined') {
+                        id = item.closest('.item-component').dataset.id;
+                        stock = item.closest('.item-component').dataset.stock;
+                        out_of_stock = item.closest('.item-component').dataset.out_of_stock;
+                        idComponent = item.closest('.item-component').dataset.component;
+                    }
+
+                    console.log(">>stock:");
+                    console.log(stock);
+                    console.log(">>out_of_stock:");
+                    console.log(out_of_stock);
+
+                    if(stock==0 && out_of_stock!=1){
+                        console.log("Not available:");
+                        console.log(event.target.dataset);
+                        return;
+                    } else{
+                        console.log("stock available.");
+                    }
+
+                    vm.selectOptions(idComponent,id);
+
+                    vm.$set(vm.loading, id, true);
+                    var axiosData = {
+                        ajax: true,
+                        id_product: id,
+                        id_component: idComponent,
+                        action: 'getSelectedComponent',
+                        secureKey: cpbToken,
+                    };
+                    axios.post(componentURL, Qs.stringify(axiosData)).then((response) => {
+                        if (response.data.hasError) {
+                            Swal.fire({
+                                type: 'error',
+                                title: vm.errorLabel,
+                                text: response.data.errors,
+                            })
+                        } else {
+                            var price = parseInt(response.data.item.min) * parseFloat(response.data.item.product.price);
+                            vm.$set(vm.selectedItem, idComponent, response.data.item);
+                            vm.$set(vm.isSelected, idComponent, true);
+                            vm.$set(vm.selectedComponents, idComponent, { 'id_product': id, 'price': price, 'qty': response.data.item.min });
+                            $("#choice-" + idComponent).html(response.data.item.product.name);
+                            vm.$delete(vm.loading, id);
+                        }
+                    }, (error) => {
+                        console.log(error)
+                        vm.$delete(vm.loading, id);
+                    })
+                },
+
+                updateSelection: function(item) {
+                    console.log(">>updateSelection:")
+                    this.$set(this.selectedComponents[item.id_component], 'ipa', item.ipa);
+                    this.$set(this.selectedComponents[item.id_component], 'price', item.price);
+                    this.$set(this.selectedComponents[item.id_component], 'qty', item.qty);
+                    this.calculatePrice();
+                    console.log("updateSelection:<<")
+                },
+
+                clearSelection: function(event) {
+                    console.log(">>clearSelection:")
+                    var self=this;
+                    var idComponent = event.target.dataset.id;
+                    this.$delete(this.isSelected, idComponent);
+                    this.$delete(this.selectedComponents, idComponent);
+                    $("#choice-" + idComponent).html("");
+
+                    delete self.userSelections[idComponent];
+                    delete self.selected[idComponent];
+
+                    //this.updataModalData();
+                    console.log(idComponent+ " cleaned");
+                    console.log("clearSelection:<<")
+                },
+
+                calculatePrice: function() {
+                    // calculate items price
+                    this.calculateItemPrice();
+                    // calculate total
+                    this.calculateTotalPrice();
+                },
+
+                calculateItemPrice: function() {
+                    this.itemPrice = 0;
+                    if (Object.keys(this.selectedComponents).length) {
+                        for (var component in this.selectedComponents) {
+                            this.itemPrice += parseFloat(this.selectedComponents[component].price);
+                        }
+                    }
+                    return this.itemPrice;
+                },
+
+                calculateTotalPrice: function() {
+                    this.totalPrice = parseFloat(this.basePrice);
+                    if (Object.keys(this.selectedComponents).length) {
+                        this.totalPrice += parseFloat(this.itemPrice);
+                    }
+                    return this.totalPrice;
+                },
+
+                getFormattedPrice: function(price) {
+                    var formattedPrice = price;
+                    if (typeof accounting != 'undefined') {
+                        formattedPrice = accounting.formatMoney(price, {
+                            precision: 2,
+                            format: '%s%V',
+                            symbol: currencySymbol,
+                        });
+                    }
+                    return formattedPrice;
+                },
+
+                overrideAddToCartBtn: function(disable) {
+                    if (psNew) {
+                        /** to disbale Prestashop 1.7.x.x original handler **/
+                        var cartButton = document.querySelector('[data-button-action="add-to-cart"]');
+                        cartButton.disabled = disable;
+                        cartButton.dataset.buttonAction = 'component-add-to-cart';
+                    } else {
+                        var cartButton = document.querySelector('#add_to_cart button[type=submit]');
+                        cartButton.setAttribute('data-button-action', 'component-add-to-cart');
+                        if (disable) {
+                            cartButton.classList.add('disable-btn');
+                            cartButton.setAttribute('disabled', 'disabled');
+                        } else {
+                            cartButton.removeAttribute('disabled');
+                            cartButton.classList.remove('disable-btn');
+                        }
+                    }
+                    cartButton.addEventListener('click', event => {
+                        if (cartButton.hasAttribute('data-button-action') && cartButton.getAttribute('data-button-action') == 'component-add-to-cart') {
+                            event.stopImmediatePropagation();
+                            event.preventDefault();
+                            this.addComponentToBasket(event);
+                        }
+                    });
+                },
+
+                switchAddToCartBtn: function(disable, reset = false) {
+                    var cartButton = document.querySelector('[data-button-action="component-add-to-cart"]');
+                    if (reset) {
+                        cartButton.setAttribute('data-button-action', 'add-to-cart');
+                    } else {
+                        if (disable) {
+                            cartButton.disabled = disable;
+                            cartButton.classList.add('disable-btn');
+                        } else {
+                            cartButton.removeAttribute('disabled');
+                            cartButton.classList.remove('disable-btn');
+                        }
+                    }
+                },
+
+                addComponentToBasket: function(event) {
+                    vm = this;
+                    vm.globalLoader = true;
+                    var $form = event.target.closest('form');
+                    var formData = vm.stringToJSON(vm.serialize($form) + '&' + '&ajax=1&action=addComponent');
+                    var serealizedComponents = vm.stringToJSON(vm.serializedComponents());
+
+                    var axiosData = {
+                        secureKey: cpbToken
+                    };
+                    $.extend(axiosData, serealizedComponents, formData);
+                    axios.post(componentURL, Qs.stringify(axiosData)).then((response) => {
+                        vm.globalLoader = false;
+                        if (typeof response !== 'undefined' && typeof response.data !== 'undefined') {
+                            if (response.data.hasError) {
+                                Swal.fire({
+                                    type: 'error',
+                                    title: vm.errorLabel,
+                                    text: response.data.errors,
+                                })
+                            } else {
+                                Swal.fire({
+                                    position: 'top-end',
+                                    type: 'success',
+                                    title: response.data.msg,
+                                    showConfirmButton: false,
+                                    timer: 1500,
+                                    onAfterClose: function() {
+                                        vm.resetComponents()
+                                        if (psNew) {
+                                            vm.emitPsNewDefaultPopup(response.data);
+                                        } else {
+                                            vm.emitPsOldDefaultPopup(response.data);
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    }, (error) => {
+                        console.log(error)
+                        vm.globalLoader = false;
+                    })
+                },
+
+                emitPsNewDefaultPopup: function(resp) {
+                    prestashop.emit('updateCart', {
+                        reason: {
+                            idProduct: resp.pid,
+                            idProductAttribute: resp.ipa,
+                            linkAction: 'add-to-cart',
+                        },
+                        resp: resp
+                    });
+                },
+
+                emitPsOldDefaultPopup: function(resp) {
+                    if (typeof resp.cf !== 'undefined' && resp.cf == 'cpb') {
+                        var jsonData = JSON.parse(resp.jsonData);
+                        var product = jsonData.products[jsonData.products.length - 1];
+                        ajaxCart.updateCartInformation(jsonData, true);
+                        ajaxCart.refresh();
+                        ajaxCart.updateLayer(product);
+                    }
+                },
+
+                resetComponents: function() {
+                    if (Object.keys(this.isSelected).length) {
+                        for (var index in this.isSelected) {
+                            this.$delete(this.isSelected, index);
+                        }
+                    }
+
+                    if (Object.keys(this.selectedComponents).length) {
+                        for (var index in this.selectedComponents) {
+                            this.$delete(this.selectedComponents, index);
+                        }
+                    }
+                },
+
+                serializedComponents: function() {
+                    var serialized = [];
+                    if (Object.keys(this.selectedComponents).length) {
+                        for (index in this.selectedComponents) {
+                            if (typeof this.selectedComponents[index].id_product !== 'undefined') {
+                                serialized.push('component_products[' + this.selectedComponents[index].id_product + ']=' + this.selectedComponents[index].id_product);
+                                if (typeof this.selectedComponents[index].ipa !== 'undefined') {
+                                    serialized.push('combinations[' + this.selectedComponents[index].id_product + ']=' + this.selectedComponents[index].ipa);
+                                } else {
+                                    serialized.push('combinations[' + this.selectedComponents[index].id_product + ']=0');
+                                }
+                                serialized.push('quantities[' + this.selectedComponents[index].id_product + ']=' + this.selectedComponents[index].qty);
+                                serialized.push('components[' + this.selectedComponents[index].id_product + ']=' + index);
+                            }
+                        }
+                    }
+                    return serialized.join('&');
+                },
+
+                objectToQuerystring: function(obj) {
+                    return Object.keys(obj).filter((key) => obj[key] != undefined && obj[key] != '').reduce((str, key, i) => {
+                        var delimiter, string, val;
+                        delimiter = (i === 0) ? '?' : '&';
+                        if (Array.isArray(obj[key])) {
+                            key = encodeURIComponent(key);
+                            var arrayVar = obj[key].reduce((str, item) => {
+                                val = encodeURIComponent(JSON.stringify(item));
+                                return [str, key, '=', val, '&'].join('');
+                            }, '');
+                            return [str, delimiter, arrayVar.trimRightString('&')].join('');
+                        } else {
+                            key = encodeURIComponent(key);
+                            val = encodeURIComponent(JSON.stringify(obj[key]));
+                            return [str, delimiter, key, '=', val].join('');
+                        }
+                    }, '');
+                },
+
+                jsonToString: function(params) {
+                    var queryString = Object.keys(params).map((key) => {
+                        return encodeURIComponent(key) + '=' + encodeURIComponent(params[key])
+                    }).join('&');
+                    return queryString;
+                },
+
+                stringToJSON: function(string) {
+                    var pairs = string.split('&');
+                    var result = {};
+                    pairs.forEach(function(pair) {
+                        pair = pair.split('=');
+                        result[pair[0]] = decodeURIComponent(pair[1] || '').replace(/\+/g, ' ');
+                    });
+                    return JSON.parse(JSON.stringify(result));
+                },
+
+                serialize: function(form) {
+                    // Setup our serialized data
+                    var serialized = [];
+
+                    // Loop through each field in the form
+                    for (var i = 0; i < form.elements.length; i++) {
+                        var field = form.elements[i];
+                        // Don't serialize fields without a name, submits, buttons, file and reset inputs, and disabled fields
+                        if (!field.name || field.disabled || field.type === 'file' || field.type === 'reset' || field.type === 'submit' || field.type === 'button') {
+                            continue;
+                        }
+                        // If a multi-select, get all selections
+                        if (field.type === 'select-multiple') {
+                            for (var n = 0; n < field.options.length; n++) {
+                                if (!field.options[n].selected) {
+                                    continue;
+                                }
+                                serialized.push((field.name) + "=" + (field.options[n].value));
+                                //serialized.push(encodeURIComponent(field.name) + "=" + encodeURIComponent(field.options[n].value));
+                            }
+                        } else if ((field.type !== 'checkbox' && field.type !== 'radio') || field.checked) {
+                            // Convert field data to a query string
+                            serialized.push((field.name) + "=" + (field.value));
+                            //serialized.push(encodeURIComponent(field.name) + "=" + encodeURIComponent(field.value));
+                        }
+                    }
+                    return serialized.join('&');
+                }
+            },
+        });
+    }
+}
