@@ -1,0 +1,74 @@
+/**
+* Advanced price rounding
+*
+* NOTICE OF LICENSE
+*
+* This product is licensed for one customer to use on one installation (test stores and multishop included).
+* Site developer has the right to modify this module to suit their needs, but can not redistribute the module in
+* whole or in part. Any other use of this module constitues a violation of the user agreement.
+*
+* DISCLAIMER
+*
+* NO WARRANTIES OF DATA SAFETY OR MODULE SECURITY
+* ARE EXPRESSED OR IMPLIED. USE THIS MODULE IN ACCORDANCE
+* WITH YOUR MERCHANT AGREEMENT, KNOWING THAT VIOLATIONS OF
+* PCI COMPLIANCY OR A DATA BREACH CAN COST THOUSANDS OF DOLLARS
+* IN FINES AND DAMAGE A STORES REPUTATION. USE AT YOUR OWN RISK.
+*
+*  @author    idnovate.com <info@idnovate.com>
+*  @copyright 2016 idnovate.com
+*  @license   See above
+*/
+
+if (typeof updatePrice !== "undefined") {
+	updatePrice = (function() {
+	    var updatePriceCached = updatePrice;
+
+	    return function(json) {
+	        updatePriceCached.apply(this, arguments);
+	        showPriceModified();
+		}
+	})();
+} else if (typeof updateDisplay !== "undefined") {
+	updateDisplay = (function() {
+	    var updateDisplayCached = updateDisplay;
+
+	    return function(json) {
+	        updateDisplayCached.apply(this, arguments);
+	        showPriceModified();
+		}
+	})();
+}
+
+
+function showPriceModified() {
+	if (typeof combinationsFromController !== "undefined") {
+		if (combinationsFromController[$('#idCombination').val()] != undefined && combinationsFromController[$('#idCombination').val()]['price_rounded'] != undefined) {
+			price_rounded = combinationsFromController[$('#idCombination').val()]['price_rounded'];
+			$('#our_price_display').text(formatCurrency(price_rounded, currencyFormat, currencySign, currencyBlank));
+
+			if (price_rounded > 0) {
+				if (combinationsFromController[$('#idCombination').val()] != undefined && combinationsFromController[$('#idCombination').val()]['old_price_rounded'] != undefined) {
+					if (combinationsFromController[$('#idCombination').val()]['old_price_rounded'] > 0) {
+						old_price_rounded = combinationsFromController[$('#idCombination').val()]['old_price_rounded'];
+						if ($('#old_price_display .price').length > 0) {
+							$('#old_price_display .price').text(formatCurrency(old_price_rounded, currencyFormat, currencySign, currencyBlank));
+						} else {
+							$('#old_price_display').text(formatCurrency(old_price_rounded, currencyFormat, currencySign, currencyBlank));
+						}
+						if ($('#reduction_percent').text().trim() != '') {
+							$('#reduction_percent').show();
+						}
+
+						if ($('#reduction_amount').text().trim() != '') {
+							$('#reduction_amount').show();
+						}
+					}
+				}
+			} else {
+				$('#reduction_percent').hide();
+				$('#old_price_display').hide();
+			}
+		}
+	}
+}
